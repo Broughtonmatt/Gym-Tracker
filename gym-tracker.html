@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0a">
+<title>Gym Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #0a0a0a; color: #fff; font-family: 'Barlow Condensed', sans-serif; overflow-x: hidden; }
+  button { font-family: 'Barlow Condensed', sans-serif; cursor: pointer; }
+  button:active { transform: scale(0.97); }
+  input, textarea { font-family: 'Barlow Condensed', sans-serif; outline: none; }
+  textarea { resize: none; }
+  #app { min-height: 100vh; min-height: 100dvh; }
+
+  /* Overlay */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .sheet {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 90;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .sheet-inner {
+    background: #111; border: 1px solid #222; border-radius: 16px 16px 0 0;
+    padding: 24px; width: 100%; max-width: 500px;
+  }
+  .hidden { display: none !important; }
+
+  /* Typography helpers */
+  .label { font-size: 10px; letter-spacing: 3px; color: #555; text-transform: uppercase; }
+  .accent { color: #FF4D00; }
+
+  /* Input style */
+  .field {
+    width: 100%; background: #1a1a1a; border: 1px solid #2a2a2a;
+    color: #fff; padding: 10px 12px; border-radius: 6px; font-size: 16px;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    width: 100%; background: #FF4D00; border: none; color: #fff;
+    padding: 18px; border-radius: 8px; font-size: 16px;
+    letter-spacing: 3px; text-transform: uppercase; font-weight: 700;
+  }
+  .btn-secondary {
+    flex: 1; background: #111; border: 1px solid #2a2a2a; color: #888;
+    padding: 14px; border-radius: 8px; font-size: 13px;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .btn-ghost {
+    flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a; color: #666;
+    padding: 14px; border-radius: 6px; font-size: 14px;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+
+  /* Progress bar */
+  .progress-track { height: 3px; background: #1a1a1a; border-radius: 2px; margin: 16px 20px 0; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+
+  /* Exercise list item */
+  .ex-item {
+    background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; text-align: left; transition: all 0.15s;
+  }
+  .ex-item.active { background: #1a1a1a; }
+
+  /* Set box */
+  .set-box {
+    width: 40px; height: 40px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; transition: all 0.2s ease;
+    border: 1px solid #2a2a2a; background: #1a1a1a; color: #333;
+  }
+  .set-box.done { color: #fff; }
+
+  /* Timer circle */
+  #timer-circle-fill {
+    transition: stroke-dashoffset 1s linear;
+  }
+
+  /* Scrollable workout session */
+  .session-scroll { flex: 1; padding: 24px 20px 0; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const STORAGE_KEY = 'gym-tracker-v2';
+
+const DEFAULT_WORKOUTS = [
+  {
+    id: 'push', name: 'PUSH', color: '#FF4D00',
+    exercises: [
+      { id: 1, name: 'Bench Press', sets: 4, reps: '8-10', weight: '80kg', notes: 'Retract scapula, controlled descent' },
+      { id: 2, name: 'Overhead Press', sets: 3, reps: '8-10', weight: '50kg', notes: "Brace core, don't flare elbows" },
+      { id: 3, name: 'Incline DB Press', sets: 3, reps: '10-12', weight: '28kg', notes: 'Full stretch at bottom' },
+      { id: 4, name: 'Lateral Raises', sets: 3, reps: '15', weight: '10kg', notes: 'Slight forward lean' },
+      { id: 5, name: 'Tricep Pushdown', sets: 3, reps: '12-15', weight: '30kg', notes: 'Lock elbows at sides' },
+    ]
+  },
+  {
+    id: 'pull', name: 'PULL', color: '#00C2FF',
+    exercises: [
+      { id: 1, name: 'Deadlift', sets: 4, reps: '5', weight: '120kg', notes: 'Push floor away, neutral spine' },
+      { id: 2, name: 'Pull Ups', sets: 4, reps: '6-8', weight: 'BW', notes: 'Dead hang, full extension' },
+      { id: 3, name: 'Barbell Row', sets: 3, reps: '8-10', weight: '70kg', notes: 'Pull to lower chest' },
+      { id: 4, name: 'Face Pulls', sets: 3, reps: '15', weight: '20kg', notes: 'External rotation at top' },
+      { id: 5, name: 'Bicep Curls', sets: 3, reps: '10-12', weight: '16kg', notes: 'No swinging' },
+    ]
+  },
+  {
+    id: 'legs', name: 'LEGS', color: '#FFCE00',
+    exercises: [
+      { id: 1, name: 'Squat', sets: 4, reps: '6-8', weight: '100kg', notes: 'Depth below parallel, knees out' },
+      { id: 2, name: 'Romanian Deadlift', sets: 3, reps: '10-12', weight: '80kg', notes: 'Hip hinge, feel the stretch' },
+      { id: 3, name: 'Leg Press', sets: 3, reps: '12', weight: '160kg', notes: "Don't lock knees at top" },
+      { id: 4, name: 'Leg Curl', sets: 3, reps: '12-15', weight: '45kg', notes: 'Slow negative' },
+      { id: 5, name: 'Calf Raises', sets: 4, reps: '15-20', weight: '60kg', notes: 'Full range of motion' },
+    ]
+  }
+];
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let state = {
+  screen: 'home',          // 'home' | 'session'
+  workouts: loadWorkouts(),
+  activeWorkoutId: null,
+  currentIdx: 0,
+  completedSets: {},       // { exId: count }
+  timerOpen: false,
+  timerSeconds: 90,
+  timerRunning: false,
+  timerTotal: 90,
+  timerInterval: null,
+  editingEx: null,
+  addingWorkout: false,
+  newWorkoutName: '',
+  colors: ['#FF4D00', '#00C2FF', '#FFCE00', '#00FF88', '#FF006E'],
+};
+
+function loadWorkouts() {
+  try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+  catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+}
+function saveWorkouts() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workouts)); } catch {}
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function activeWorkout() { return state.workouts.find(w => w.id === state.activeWorkoutId); }
+function currentEx() { const w = activeWorkout(); return w ? w.exercises[state.currentIdx] : null; }
+
+function setState(updates) {
+  Object.assign(state, updates);
+  render();
+}
+
+// ── Timer ──────────────────────────────────────────────────────────────────────
+function startTimer(seconds) {
+  clearInterval(state.timerInterval);
+  const interval = setInterval(() => {
+    if (state.timerSeconds <= 0) { clearInterval(interval); setState({ timerRunning: false }); return; }
+    state.timerSeconds--;
+    updateTimerDisplay();
+  }, 1000);
+  state.timerInterval = interval;
+  state.timerRunning = true;
+  state.timerSeconds = seconds;
+  state.timerTotal = seconds;
+}
+
+function updateTimerDisplay() {
+  const s = state.timerSeconds;
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  const el = document.getElementById('timer-display');
+  const go = document.getElementById('timer-go');
+  const circle = document.getElementById('timer-circle-fill');
+  const btn = document.getElementById('timer-pause-btn');
+  if (!el) return;
+  el.textContent = `${mins}:${String(secs).padStart(2,'0')}`;
+  el.style.color = s === 0 ? '#00FF88' : '#fff';
+  if (go) go.classList.toggle('hidden', s !== 0);
+  if (circle) {
+    const r = 100, circ = 2 * Math.PI * r;
+    const progress = (state.timerTotal - s) / state.timerTotal;
+    circle.style.strokeDashoffset = circ * (1 - progress);
+    circle.setAttribute('stroke', s === 0 ? '#00FF88' : '#FF4D00');
+  }
+  if (btn) btn.textContent = state.timerRunning ? 'Pause' : 'Resume';
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  if (state.screen === 'home') renderHome(app);
+  else if (state.screen === 'session') renderSession(app);
+
+  if (state.timerOpen) renderTimer(app);
+  if (state.editingEx) renderEditModal(app);
+
+  // Re-attach timer interval display after render
+  if (state.timerOpen) updateTimerDisplay();
+}
+
+// ── HOME ──────────────────────────────────────────────────────────────────────
+function renderHome(app) {
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+  const div = document.createElement('div');
+  div.style.cssText = 'min-height:100vh;min-height:100dvh;';
+
+  let workoutCards = state.workouts.map(w => `
+    <button class="workout-card" data-id="${w.id}" style="
+      background:#111; border:1px solid #1e1e1e; border-radius:10px;
+      padding:20px; cursor:pointer; text-align:left;
+      display:flex; align-items:center; justify-content:space-between;
+      position:relative; overflow:hidden; width:100%; transition:border-color 0.2s;
+    ">
+      <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${w.color}"></div>
+      <div style="padding-left:12px">
+        <div style="font-size:28px;font-weight:700;letter-spacing:2px;color:#fff">${w.name}</div>
+        <div style="font-size:13px;color:#555;margin-top:2px">${w.exercises.length} exercises</div>
+      </div>
+      <div style="font-size:24px;color:${w.color}">→</div>
+    </button>
+  `).join('');
+
+  const addSection = state.addingWorkout ? `
+    <div style="margin-top:12px;background:#111;border:1px solid #2a2a2a;border-radius:10px;padding:16px">
+      <div class="label" style="margin-bottom:8px">Workout Name</div>
+      <input id="new-workout-input" class="field" value="${state.newWorkoutName}"
+        placeholder="e.g. UPPER, CARDIO..."
+        style="font-size:18px;text-transform:uppercase;letter-spacing:2px;width:100%">
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="confirm-add-workout" style="flex:1;background:#FF4D00;border:none;color:#fff;padding:12px;border-radius:6px;font-size:14px;letter-spacing:2px;text-transform:uppercase;font-weight:700">Add</button>
+        <button id="cancel-add-workout" class="btn-ghost">Cancel</button>
+      </div>
+    </div>
+  ` : `
+    <button id="add-workout-btn" style="width:100%;margin-top:12px;background:transparent;border:1px dashed #2a2a2a;color:#444;padding:16px;border-radius:10px;font-size:14px;letter-spacing:3px;text-transform:uppercase">
+      + Add Workout
+    </button>
+  `;
+
+  div.innerHTML = `
+    <div style="padding:40px 24px 20px">
+      <div class="label" style="margin-bottom:4px">${today}</div>
+      <div style="font-size:44px;font-weight:800;letter-spacing:-1px;line-height:1">GYM</div>
+      <div style="font-size:44px;font-weight:800;letter-spacing:-1px;line-height:1;color:#FF4D00">TRACKER</div>
+    </div>
+    <div style="padding:0 24px 40px">
+      <div class="label" style="margin-bottom:16px">Your workouts</div>
+      <div style="display:flex;flex-direction:column;gap:12px">${workoutCards}</div>
+      ${addSection}
+      <div style="margin-top:32px;padding:14px 16px;background:#0f0f0f;border-radius:8px;border:1px solid #1a1a1a;font-size:12px;color:#444;line-height:1.6">
+        💡 Tap an exercise's <span style="color:#666">Edit</span> button during a workout to update weights or notes. Changes save automatically.
+      </div>
+    </div>
+  `;
+  app.appendChild(div);
+
+  // Events
+  div.querySelectorAll('.workout-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setState({ screen: 'session', activeWorkoutId: btn.dataset.id, currentIdx: 0, completedSets: {} });
+    });
+  });
+
+  const addBtn = div.querySelector('#add-workout-btn');
+  if (addBtn) addBtn.addEventListener('click', () => setState({ addingWorkout: true }));
+
+  const confirmBtn = div.querySelector('#confirm-add-workout');
+  if (confirmBtn) {
+    const input = div.querySelector('#new-workout-input');
+    input.addEventListener('input', e => { state.newWorkoutName = e.target.value; });
+    confirmBtn.addEventListener('click', () => {
+      const name = (div.querySelector('#new-workout-input').value || '').trim();
+      if (!name) return;
+      const newW = {
+        id: Date.now().toString(),
+        name: name.toUpperCase(),
+        color: state.colors[state.workouts.length % state.colors.length],
+        exercises: [{ id: 1, name: 'Exercise 1', sets: 3, reps: '10', weight: '—', notes: '' }]
+      };
+      state.workouts.push(newW);
+      saveWorkouts();
+      setState({ addingWorkout: false, newWorkoutName: '' });
+    });
+  }
+
+  const cancelBtn = div.querySelector('#cancel-add-workout');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => setState({ addingWorkout: false, newWorkoutName: '' }));
+}
+
+// ── SESSION ───────────────────────────────────────────────────────────────────
+function renderSession(app) {
+  const workout = activeWorkout();
+  if (!workout) return;
+  const exercises = workout.exercises;
+  const ex = exercises[state.currentIdx];
+  const totalSets = parseInt(ex.sets) || 3;
+  const doneSets = state.completedSets[ex.id] || 0;
+  const allDone = exercises.every(e => (state.completedSets[e.id] || 0) >= (parseInt(e.sets) || 3));
+  const progress = exercises.reduce((sum, e) => sum + Math.min((state.completedSets[e.id] || 0) / (parseInt(e.sets) || 3), 1), 0) / exercises.length;
+
+  const setBoxes = Array.from({ length: totalSets }).map((_, i) => {
+    const done = i < doneSets;
+    return `<div class="set-box${done ? ' done' : ''}" style="${done ? `background:${workout.color};border-color:${workout.color}` : ''}">${done ? '✓' : i + 1}</div>`;
+  }).join('');
+
+  const exList = exercises.map((e, i) => {
+    const done = (state.completedSets[e.id] || 0) >= (parseInt(e.sets) || 3);
+    const active = i === state.currentIdx;
+    return `
+      <button class="ex-item${active ? ' active' : ''}" data-idx="${i}"
+        style="${active ? `border-color:${workout.color}33` : ''}">
+        <span style="font-size:16px;color:${done ? '#555' : active ? '#fff' : '#666'};text-decoration:${done ? 'line-through' : 'none'};font-family:inherit">${e.name}</span>
+        <span style="font-size:12px;color:${done ? '#00FF88' : '#444'};font-family:inherit">${done ? '✓ done' : `${state.completedSets[e.id] || 0}/${e.sets}`}</span>
+      </button>`;
+  }).join('');
+
+  const bottomBtns = allDone ? `
+    <button id="finish-btn" style="background:#00FF88;border:none;color:#000;padding:18px;border-radius:8px;font-size:16px;letter-spacing:3px;text-transform:uppercase;font-weight:700;width:100%">
+      Workout Complete 🔥
+    </button>
+  ` : `
+    <button id="log-set-btn" ${doneSets >= totalSets ? 'disabled' : ''} style="
+      background:${doneSets >= totalSets ? '#1a1a1a' : workout.color};
+      border:none;color:${doneSets >= totalSets ? '#444' : '#fff'};
+      padding:18px;border-radius:8px;font-size:16px;width:100%;
+      letter-spacing:3px;text-transform:uppercase;font-weight:700;
+      ${doneSets >= totalSets ? 'cursor:not-allowed' : ''}
+    ">${doneSets >= totalSets ? 'All Sets Done ✓' : `Log Set ${doneSets + 1}`}</button>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button id="open-timer-btn" class="btn-secondary">⏱ Rest Timer</button>
+      <button id="next-ex-btn" class="btn-secondary" ${state.currentIdx >= exercises.length - 1 ? 'disabled style="color:#333"' : ''}>Next →</button>
+    </div>
+  `;
+
+  const div = document.createElement('div');
+  div.style.cssText = 'min-height:100vh;min-height:100dvh;display:flex;flex-direction:column';
+  div.innerHTML = `
+    <div style="padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between">
+      <button id="back-btn" style="background:none;border:none;color:#555;font-size:28px;line-height:1;padding:0">←</button>
+      <div style="font-size:13px;letter-spacing:6px;color:${workout.color};text-transform:uppercase">${workout.name}</div>
+      <div style="font-size:13px;color:#444">${state.currentIdx + 1}/${exercises.length}</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" style="width:${progress * 100}%;background:${workout.color}"></div>
+    </div>
+    <div class="session-scroll">
+      <div style="background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:24px;position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${workout.color};border-radius:12px 0 0 12px"></div>
+        <div style="padding-left:16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="font-size:32px;font-weight:700;letter-spacing:1px;line-height:1.1;flex:1">${ex.name}</div>
+            <button id="edit-ex-btn" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#666;padding:6px 12px;border-radius:4px;font-size:11px;letter-spacing:2px;text-transform:uppercase">Edit</button>
+          </div>
+          <div style="display:flex;gap:20px;margin-top:20px">
+            ${[['Sets', ex.sets], ['Reps', ex.reps], ['Weight', ex.weight]].map(([l, v]) => `
+              <div>
+                <div class="label">${l}</div>
+                <div style="font-size:24px;font-weight:700;color:${workout.color};margin-top:2px">${v}</div>
+              </div>`).join('')}
+          </div>
+          ${ex.notes ? `
+            <div style="margin-top:16px;background:#0f0f0f;border-radius:6px;padding:10px 14px;border-left:2px solid #2a2a2a">
+              <div class="label" style="margin-bottom:4px">Form cue</div>
+              <div style="font-size:15px;color:#888;line-height:1.5">${ex.notes}</div>
+            </div>` : ''}
+          <div style="margin-top:20px">
+            <div class="label" style="margin-bottom:10px">Sets completed</div>
+            <div style="display:flex;gap:8px">${setBoxes}</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px">
+        <div class="label" style="margin-bottom:10px">All exercises</div>
+        <div style="display:flex;flex-direction:column;gap:6px">${exList}</div>
+      </div>
+    </div>
+    <div style="padding:20px;padding-bottom:max(20px, env(safe-area-inset-bottom))">
+      ${bottomBtns}
+    </div>
+  `;
+  app.appendChild(div);
+
+  // Events
+  div.querySelector('#back-btn').addEventListener('click', () => setState({ screen: 'home', activeWorkoutId: null }));
+  div.querySelector('#edit-ex-btn').addEventListener('click', () => setState({ editingEx: { ...ex } }));
+
+  const logBtn = div.querySelector('#log-set-btn');
+  if (logBtn && !logBtn.disabled) {
+    logBtn.addEventListener('click', () => {
+      const next = doneSets + 1;
+      state.completedSets = { ...state.completedSets, [ex.id]: next };
+      if (next < totalSets) {
+        state.timerOpen = true;
+        startTimer(90);
+      }
+      render();
+    });
+  }
+
+  const timerBtn = div.querySelector('#open-timer-btn');
+  if (timerBtn) timerBtn.addEventListener('click', () => { state.timerOpen = true; startTimer(90); render(); });
+
+  const nextBtn = div.querySelector('#next-ex-btn');
+  if (nextBtn && !nextBtn.disabled) {
+    nextBtn.addEventListener('click', () => setState({ currentIdx: Math.min(state.currentIdx + 1, exercises.length - 1) }));
+  }
+
+  const finishBtn = div.querySelector('#finish-btn');
+  if (finishBtn) finishBtn.addEventListener('click', () => setState({ screen: 'home', activeWorkoutId: null }));
+
+  div.querySelectorAll('.ex-item').forEach(btn => {
+    btn.addEventListener('click', () => setState({ currentIdx: parseInt(btn.dataset.idx) }));
+  });
+}
+
+// ── TIMER OVERLAY ─────────────────────────────────────────────────────────────
+function renderTimer(app) {
+  const r = 100, circ = 2 * Math.PI * r;
+  const s = state.timerSeconds;
+  const progress = (state.timerTotal - s) / state.timerTotal;
+
+  const div = document.createElement('div');
+  div.className = 'overlay';
+  div.innerHTML = `
+    <div class="label" style="margin-bottom:32px;letter-spacing:6px">Rest Timer</div>
+    <div style="position:relative;width:220px;height:220px;margin-bottom:32px">
+      <svg width="220" height="220" style="position:absolute;top:0;left:0;transform:rotate(-90deg)">
+        <circle cx="110" cy="110" r="100" fill="none" stroke="#1a1a1a" stroke-width="8"/>
+        <circle id="timer-circle-fill" cx="110" cy="110" r="100" fill="none"
+          stroke="${s === 0 ? '#00FF88' : '#FF4D00'}" stroke-width="8"
+          stroke-dasharray="${circ}"
+          stroke-dashoffset="${circ * (1 - progress)}"/>
+      </svg>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <div id="timer-display" style="font-size:64px;font-weight:700;color:${s === 0 ? '#00FF88' : '#fff'};line-height:1">
+          ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}
+        </div>
+        <div id="timer-go" class="${s !== 0 ? 'hidden' : ''}" style="font-size:14px;letter-spacing:4px;color:#00FF88;margin-top:8px">GO!</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:24px">
+      ${[60,90,120,180].map(p => `<button class="preset-btn" data-secs="${p}" style="background:#1a1a1a;border:1px solid #333;color:#aaa;padding:8px 16px;border-radius:4px;font-size:13px;letter-spacing:1px">${p}s</button>`).join('')}
+    </div>
+    <div style="display:flex;gap:12px">
+      <button id="timer-pause-btn" style="background:${state.timerRunning ? '#1a1a1a' : '#FF4D00'};border:1px solid #333;color:#fff;padding:12px 28px;border-radius:4px;font-size:14px;letter-spacing:2px;text-transform:uppercase">
+        ${state.timerRunning ? 'Pause' : 'Resume'}
+      </button>
+      <button id="timer-close-btn" style="background:transparent;border:1px solid #333;color:#666;padding:12px 28px;border-radius:4px;font-size:14px;letter-spacing:2px;text-transform:uppercase">Done</button>
+    </div>
+  `;
+  app.appendChild(div);
+
+  div.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => startTimer(parseInt(btn.dataset.secs)));
+  });
+
+  div.querySelector('#timer-pause-btn').addEventListener('click', () => {
+    if (state.timerRunning) {
+      clearInterval(state.timerInterval);
+      state.timerRunning = false;
+    } else {
+      startTimer(state.timerSeconds);
+    }
+    updateTimerDisplay();
+    const btn = document.getElementById('timer-pause-btn');
+    if (btn) { btn.textContent = state.timerRunning ? 'Pause' : 'Resume'; btn.style.background = state.timerRunning ? '#1a1a1a' : '#FF4D00'; }
+  });
+
+  div.querySelector('#timer-close-btn').addEventListener('click', () => {
+    clearInterval(state.timerInterval);
+    state.timerRunning = false;
+    state.timerOpen = false;
+    render();
+  });
+}
+
+// ── EDIT MODAL ────────────────────────────────────────────────────────────────
+function renderEditModal(app) {
+  const ex = state.editingEx;
+  const div = document.createElement('div');
+  div.className = 'sheet';
+  div.innerHTML = `
+    <div class="sheet-inner">
+      <div class="label" style="margin-bottom:16px;letter-spacing:5px">Edit Exercise</div>
+      ${[
+        { label: 'Exercise Name', key: 'name', type: 'input' },
+        { label: 'Sets', key: 'sets', type: 'input' },
+        { label: 'Reps', key: 'reps', type: 'input' },
+        { label: 'Weight', key: 'weight', type: 'input' },
+        { label: 'Notes / Form Cues', key: 'notes', type: 'textarea' },
+      ].map(({ label, key, type }) => `
+        <div style="margin-bottom:12px">
+          <div class="label" style="margin-bottom:4px">${label}</div>
+          ${type === 'textarea'
+            ? `<textarea class="field edit-field" data-key="${key}" rows="3" style="width:100%">${ex[key] || ''}</textarea>`
+            : `<input class="field edit-field" data-key="${key}" value="${ex[key] || ''}" style="width:100%">`
+          }
+        </div>
+      `).join('')}
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button id="save-edit-btn" style="flex:1;background:#FF4D00;border:none;color:#fff;padding:14px;border-radius:6px;font-size:15px;letter-spacing:2px;text-transform:uppercase;font-weight:700">Save</button>
+        <button id="cancel-edit-btn" class="btn-ghost">Cancel</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(div);
+
+  // Live update editingEx
+  div.querySelectorAll('.edit-field').forEach(field => {
+    field.addEventListener('input', e => { state.editingEx[e.target.dataset.key] = e.target.value; });
+  });
+
+  div.querySelector('#save-edit-btn').addEventListener('click', () => {
+    const workout = activeWorkout();
+    if (workout) {
+      workout.exercises = workout.exercises.map(e => e.id === state.editingEx.id ? { ...state.editingEx } : e);
+      saveWorkouts();
+    }
+    state.editingEx = null;
+    render();
+  });
+
+  div.querySelector('#cancel-edit-btn').addEventListener('click', () => setState({ editingEx: null }));
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
